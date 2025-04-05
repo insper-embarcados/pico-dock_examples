@@ -53,6 +53,7 @@ add_executable(PicoDock_FULL_Example
     tft_lcd_ili9341/gfx/gfx.c
     tft_lcd_ili9341/ili9341/ili9341.c
     tft_lcd_ili9341/touch_resistive/touch_resistive.c
+	tft_lcd_ili9341/touch_capacitive/touch_capacitive.c
 )
 
 # Nome e versão do programa
@@ -84,6 +85,7 @@ target_include_directories(PicoDock_FULL_Example PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gfx
     ${CMAKE_CURRENT_LIST_DIR}/ili9341
     ${CMAKE_CURRENT_LIST_DIR}/touch_resistive
+	${CMAKE_CURRENT_LIST_DIR}/touch_capacitive
 )
 
 # Gera os arquivos UF2 e binários

@@ -1,5 +1,4 @@
 add_executable(touch_resistive
-        main.c
         touch_resistive.c
         )
 

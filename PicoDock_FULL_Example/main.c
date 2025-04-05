@@ -1,12 +1,25 @@
+
+// DEFINIR QUAL TOUCH USAR!!!!
+//#define TOUCH_RESISTIVE
+
+
+
+
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 
-// Display ILI9341 + Touch
+// Display ILI9341
 #include "tft_lcd_ili9341/ili9341/ili9341.h"
 #include "tft_lcd_ili9341/gfx/gfx.h"
+
+
+//  Touch Resistivo
 #include "tft_lcd_ili9341/touch_resistive/touch_resistive.h"
+
+//  Touch Capacitivo
+#include "tft_lcd_ili9341/touch_capacitive/touch_capacitive.h"
 
 // Display SSD1306 + Botões
 #include "ssd1306/ssd1306.h"
@@ -18,6 +31,13 @@
 // === Definições para ILI9341 ===
 const uint LITE = 15;
 #define SCREEN_WIDTH 240
+
+// === Definições para FT6206 ===
+const int I2C_SCL_GPIO = 21;
+const int I2C_SDA_GPIO = 20;
+
+
+
 
 // === Definições para SSD1306 ===
 ssd1306_t disp;
@@ -65,11 +85,28 @@ void oled_init(void) {
 int main(void) {
     stdio_init_all();
 
+
+
     // Inicialização LCD + Touch
     LCD_initDisplay();
     LCD_setRotation(0);
     GFX_createFramebuf();
+
+    #ifdef TOUCH_RESISTIVE
+    //inicializa touch resistivo
     configure_touch();
+    #else
+    // Inicializa touch capacitivo
+    touch_init_i2c(I2C_SDA_GPIO, I2C_SCL_GPIO, DEFAULT_I2C_PORT);
+    if (!touch_capacitive_begin(128)) {
+        printf("Falha ao inicializar o sensor de toque FT6206.\n");
+        while (1) tight_loop_contents();
+    }
+
+    printf("Sensor de toque iniciado com sucesso!\n");
+    
+    #endif
+
 
     // Inicialização do pino de backlight e apagamento inicial
     gpio_init(LITE);
@@ -108,14 +145,39 @@ int main(void) {
         GFX_setCursor(0, 10);
         GFX_printf("Touch Demo\n");
 
-        if (readPoint(&px, &py)) {
-            gpio_put(LITE, 1); // Liga o backlight quando toca
-            px = SCREEN_WIDTH - px;
-            GFX_printf("X:%03d Y:%03d\n", px, py);
-        } else {
-            gpio_put(LITE, 0); // Apaga o backlight quando não toca
-            GFX_printf("Sem toque\n");
-        }
+        #ifdef TOUCH_RESISTIVE
+    if (readPoint(&px, &py)) {
+        gpio_put(LITE, 1); // Liga o backlight quando toca
+        px = SCREEN_WIDTH - px;
+        GFX_printf("X:%03d Y:%03d\n", px, py);  // Usando GFX_printf para o toque resistivo
+        gpio_put(BUZZER_PIN, 1); sleep_us(3000);
+        gpio_put(BUZZER_PIN, 0); sleep_us(3000);
+    } else {
+        gpio_put(LITE, 0); // Apaga o backlight quando não toca
+        GFX_printf("Sem toque\n");
+    }
+#else
+    TS_Point points[2];
+    uint8_t n = touch_capacitive_getPoints(points);
+
+    // Verifica se algum toque foi detectado
+    if (n > 0) {
+        // Se houve toque, acende o backlight
+        gpio_put(LITE, 1);
+
+        // Ajuste a coordenada X para inverter o valor
+        int adjustedX = 240 - points[0].x;  // Inverter a coordenada X (ajuste para a tela)
+
+        // Usando GFX_printf para o toque capacitivo
+        GFX_printf("X:%03d Y:%03d\n", adjustedX, points[0].y);
+        gpio_put(BUZZER_PIN, 1); sleep_us(3000);
+        gpio_put(BUZZER_PIN, 0); sleep_us(3000);
+    } else {
+        // Se não houver toque, apaga o backlight
+        gpio_put(LITE, 0);
+        GFX_printf("Sem toque\n");
+    }
+#endif
 
         GFX_flush();
 
@@ -149,8 +211,8 @@ int main(void) {
             ssd1306_draw_string(&disp, 8, 24, 2, "BLUE");
             ssd1306_show(&disp);
             while (flag_BTN_B == 1) {
-                gpio_put(BUZZER_PIN, 1); sleep_us(3000);
-                gpio_put(BUZZER_PIN, 0); sleep_us(3000);
+                gpio_put(BUZZER_PIN, 1); sleep_us(1500);
+                gpio_put(BUZZER_PIN, 0); sleep_us(1500);
             }
             ssd1306_clear(&disp); ssd1306_show(&disp);
             gpio_put(LED_PIN_B, 1);
