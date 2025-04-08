@@ -1,19 +1,15 @@
-
 // DEFINIR QUAL TOUCH USAR!!!!
 //#define TOUCH_RESISTIVE
-
-
-
 
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
+#include "hardware/adc.h"
 #include "hardware/i2c.h"
 
 // Display ILI9341
 #include "tft_lcd_ili9341/ili9341/ili9341.h"
 #include "tft_lcd_ili9341/gfx/gfx.h"
-
 
 //  Touch Resistivo
 #include "tft_lcd_ili9341/touch_resistive/touch_resistive.h"
@@ -36,9 +32,6 @@ const uint LITE = 15;
 const int I2C_SCL_GPIO = 21;
 const int I2C_SDA_GPIO = 20;
 
-
-
-
 // === Definições para SSD1306 ===
 ssd1306_t disp;
 const uint8_t *fonts[4] = {acme_font, bubblesstandard_font, crackers_font, BMSPA_font};
@@ -50,6 +43,23 @@ const int LED_PIN_R = 7;
 const int LED_PIN_G = 8;
 const int LED_PIN_B = 9;
 const int BUZZER_PIN = 10;
+
+// === Definições para 4051 e ADC ===
+const uint SEL_A_4051 = 13;
+const uint SEL_B_4051 = 12;
+const uint SEL_C_4051 = 11;
+
+void polling_adc_init(void) {
+    gpio_init(SEL_A_4051); gpio_set_dir(SEL_A_4051, GPIO_OUT);
+    gpio_init(SEL_B_4051); gpio_set_dir(SEL_B_4051, GPIO_OUT);
+    gpio_init(SEL_C_4051); gpio_set_dir(SEL_C_4051, GPIO_OUT);
+}
+
+void select_4051_channel(uint channel) {
+    gpio_put(SEL_A_4051, channel & 0x01);
+    gpio_put(SEL_B_4051, (channel >> 1) & 0x01);
+    gpio_put(SEL_C_4051, (channel >> 2) & 0x01);
+}
 
 volatile int flag_BTN_R = 0;
 volatile int flag_BTN_G = 0;
@@ -73,62 +83,42 @@ void oled_init(void) {
     i2c_init(i2c1, 400000);
     gpio_set_function(2, GPIO_FUNC_I2C);
     gpio_set_function(3, GPIO_FUNC_I2C);
-    gpio_pull_up(2);
-    gpio_pull_up(3);
+    gpio_pull_up(2); gpio_pull_up(3);
 
     disp.external_vcc = false;
     ssd1306_init(&disp, 128, 64, 0x3C, i2c1);
-    ssd1306_clear(&disp);
-    ssd1306_show(&disp);
+    ssd1306_clear(&disp); ssd1306_show(&disp);
 }
 
 int main(void) {
     stdio_init_all();
 
-
-
-    // Inicialização LCD + Touch
+    // Inicialização do display LCD + Touch
     LCD_initDisplay();
     LCD_setRotation(0);
     GFX_createFramebuf();
 
-    #ifdef TOUCH_RESISTIVE
-    //inicializa touch resistivo
-    configure_touch();
-    #else
-    // Inicializa touch capacitivo
+#ifdef TOUCH_RESISTIVE
+    configure_touch(); // Inicializa touch resistivo
+#else
     touch_init_i2c(I2C_SDA_GPIO, I2C_SCL_GPIO, DEFAULT_I2C_PORT);
     if (!touch_capacitive_begin(128)) {
         printf("Falha ao inicializar o sensor de toque FT6206.\n");
         while (1) tight_loop_contents();
     }
-
     printf("Sensor de toque iniciado com sucesso!\n");
-    
-    #endif
+#endif
 
+    gpio_init(LITE); gpio_set_dir(LITE, GPIO_OUT); gpio_put(LITE, 0);
 
-    // Inicialização do pino de backlight e apagamento inicial
-    gpio_init(LITE);
-    gpio_set_dir(LITE, GPIO_OUT);
-    gpio_put(LITE, 0);  // Apaga o backlight inicialmente
-
-    // Inicialização OLED + Botões
     oled_init();
 
-    gpio_init(BTN_PIN_R);
-    gpio_set_dir(BTN_PIN_R, GPIO_IN);
-    gpio_pull_up(BTN_PIN_R);
+    // Inicialização dos botões e LEDs
+    gpio_init(BTN_PIN_R); gpio_set_dir(BTN_PIN_R, GPIO_IN); gpio_pull_up(BTN_PIN_R);
     gpio_set_irq_enabled_with_callback(BTN_PIN_R, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &btn_callback);
-
-    gpio_init(BTN_PIN_G);
-    gpio_set_dir(BTN_PIN_G, GPIO_IN);
-    gpio_pull_up(BTN_PIN_G);
+    gpio_init(BTN_PIN_G); gpio_set_dir(BTN_PIN_G, GPIO_IN); gpio_pull_up(BTN_PIN_G);
     gpio_set_irq_enabled(BTN_PIN_G, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
-
-    gpio_init(BTN_PIN_B);
-    gpio_set_dir(BTN_PIN_B, GPIO_IN);
-    gpio_pull_up(BTN_PIN_B);
+    gpio_init(BTN_PIN_B); gpio_set_dir(BTN_PIN_B, GPIO_IN); gpio_pull_up(BTN_PIN_B);
     gpio_set_irq_enabled(BTN_PIN_B, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
 
     gpio_init(LED_PIN_R); gpio_set_dir(LED_PIN_R, GPIO_OUT); gpio_put(LED_PIN_R, 1);
@@ -136,6 +126,12 @@ int main(void) {
     gpio_init(LED_PIN_B); gpio_set_dir(LED_PIN_B, GPIO_OUT); gpio_put(LED_PIN_B, 1);
 
     gpio_init(BUZZER_PIN); gpio_set_dir(BUZZER_PIN, GPIO_OUT);
+
+    // Inicialização ADC e 4051
+    polling_adc_init();
+    adc_init();
+    adc_gpio_init(28); // GPIO28 = ADC2
+    adc_select_input(2);
 
     int px, py;
 
@@ -145,39 +141,42 @@ int main(void) {
         GFX_setCursor(0, 10);
         GFX_printf("Touch Demo\n");
 
-        #ifdef TOUCH_RESISTIVE
-    if (readPoint(&px, &py)) {
-        gpio_put(LITE, 1); // Liga o backlight quando toca
-        px = SCREEN_WIDTH - px;
-        GFX_printf("X:%03d Y:%03d\n", px, py);  // Usando GFX_printf para o toque resistivo
-        gpio_put(BUZZER_PIN, 1); sleep_us(3000);
-        gpio_put(BUZZER_PIN, 0); sleep_us(3000);
-    } else {
-        gpio_put(LITE, 0); // Apaga o backlight quando não toca
-        GFX_printf("Sem toque\n");
-    }
+#ifdef TOUCH_RESISTIVE
+        if (readPoint(&px, &py)) {
+            gpio_put(LITE, 1);
+            px = SCREEN_WIDTH - px;
+            GFX_printf("X:%03d Y:%03d\n", px, py);
+            gpio_put(BUZZER_PIN, 1); sleep_us(3000);
+            gpio_put(BUZZER_PIN, 0); sleep_us(3000);
+        } else {
+            gpio_put(LITE, 0);
+            GFX_printf("Sem toque\n");
+        }
 #else
-    TS_Point points[2];
-    uint8_t n = touch_capacitive_getPoints(points);
-
-    // Verifica se algum toque foi detectado
-    if (n > 0) {
-        // Se houve toque, acende o backlight
-        gpio_put(LITE, 1);
-
-        // Ajuste a coordenada X para inverter o valor
-        int adjustedX = 240 - points[0].x;  // Inverter a coordenada X (ajuste para a tela)
-
-        // Usando GFX_printf para o toque capacitivo
-        GFX_printf("X:%03d Y:%03d\n", adjustedX, points[0].y);
-        gpio_put(BUZZER_PIN, 1); sleep_us(3000);
-        gpio_put(BUZZER_PIN, 0); sleep_us(3000);
-    } else {
-        // Se não houver toque, apaga o backlight
-        gpio_put(LITE, 0);
-        GFX_printf("Sem toque\n");
-    }
+        TS_Point points[2];
+        uint8_t n = touch_capacitive_getPoints(points);
+        if (n > 0) {
+            gpio_put(LITE, 1);
+            int adjustedX = 240 - points[0].x;
+            GFX_printf("X:%03d Y:%03d\n", adjustedX, points[0].y);
+            gpio_put(BUZZER_PIN, 1); sleep_us(3000);
+            gpio_put(BUZZER_PIN, 0); sleep_us(3000);
+        } else {
+            gpio_put(LITE, 0);
+            GFX_printf("Sem toque\n");
+        }
 #endif
+
+
+         // === Leitura dos canais do 4051 no LCD ===
+        for (uint channel = 0; channel < 8; channel++) {
+            select_4051_channel(channel);
+            sleep_ms(5); // estabilização
+            uint16_t result = adc_read();
+            GFX_setCursor(0, 40 + channel * 10);
+            GFX_printf("Canal %d: %4d\n", channel, result);
+        }
+
 
         GFX_flush();
 
@@ -218,6 +217,7 @@ int main(void) {
             gpio_put(LED_PIN_B, 1);
         }
 
-        sleep_ms(1); // Controle geral de atualização
+       
+        sleep_ms(1);
     }
 }

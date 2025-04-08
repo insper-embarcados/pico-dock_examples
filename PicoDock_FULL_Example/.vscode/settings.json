@@ -39,6 +39,7 @@
     "files.associations": {
         "touch_resistive.h": "c",
         "bubblesstandard_font.h": "c",
-        "gfx.h": "c"
+        "gfx.h": "c",
+        "ili9341.h": "c"
     }
 }
