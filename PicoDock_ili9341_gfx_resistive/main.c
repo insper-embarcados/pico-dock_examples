@@ -116,7 +116,6 @@ int main(void)
         // Linha 2
         char buffer[40];                                // Buffer para armazenar as coordenadas formatadas
         sprintf(buffer, "X:%d Y:%d", drawX, drawY);     // Formata as coordenadas em uma string   
-
         gfx_setCursor(12, _height - 20);                // Posição para a segunda linha de texto, um pouco abaixo da primeira
         gfx_print(buffer);                              // Escreve as coordenadas do toque formatadas
 
