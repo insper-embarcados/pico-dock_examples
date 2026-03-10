@@ -1,5 +1,4 @@
 add_library(gfx
-	#gfx_adafruit.c
 	gfx_ili9341.c
 )
 
