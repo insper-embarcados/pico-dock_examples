@@ -9,12 +9,12 @@
 
 // Propriedades do LCD
 #define SCREEN_ROTATION 1           // 0 = RETRATO, 1 = PAISAGEM
-extern uint16_t _width;             // Variável global definida em gfx_ili9341.c que armazena a largura da tela
-extern uint16_t _height;            // Variável global definida em gfx_ili9341.c que armazena a altura da tela
+const int width = 320;             // Variável global definida em gfx_ili9341.c que armazena a largura da tela
+const int height = 240;            // Variável global definida em gfx_ili9341.c que armazena a altura da tela
 
 // Posição da imagem na tela
-const int  ledImgPosX = (_width - 47) / 2;
-const int  ledImgPosY = (_height - 82) / 2;
+const int  ledImgPosX = (width - 47) / 2;
+const int  ledImgPosY = (height - 82) / 2;
 
 // flag btn (não precisa ser volatile pq não é callback de HW!)
 int f_btn = 0;
@@ -52,7 +52,7 @@ int main() {
     gfx_setTextColor(0x07E0);                           // Define a cor do texto (verde)
 
     gfx_drawText(
-        _width/6,                                       // Posição horizontal do texto
+        width/6,                                       // Posição horizontal do texto
         10,                                             // Posição vertical do texto
         "PicoDock LED Toggle"                           // Texto a ser exibido
     );
